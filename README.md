@@ -10,66 +10,6 @@ Hệ thống cho phép người dùng tìm kiếm, so sánh giá phòng và tra 
 
 Kiến trúc vật lý của hệ thống tuân thủ nguyên lý tách rời **Tính toán (Compute)** và **Lưu trữ (Storage)** để đảm bảo tính chịu lỗi, co giãn linh hoạt và tối ưu hóa chi phí:
 
-```mermaid
-graph TD
-    %% Scraper Layer
-    subgraph "1. Web Scraping Layer (Local / VM)"
-        Scraper["Scraper Pipeline <br/>(pipeline.py)"]
-        Firecrawl["Firecrawl Engine <br/>(Cào Booking.com)"]
-        SQLiteDB[("SQLite Warehouse <br/>(hotel_warehouse.db)"]
-        ExportCSV["raw_hotels_full.csv"]
-
-        Firecrawl -->|Tải trang HTML thô| Scraper
-        Scraper -->|Phân tích & Chuẩn hóa| SQLiteDB
-        SQLiteDB -->|Export CSV| ExportCSV
-    end
-
-    %% Cloud Storage / Raw Ingestion
-    subgraph "2. Data Ingestion (GCP)"
-        GCS[("GCS Bucket: <br/>danang-hotels-raw-data")]
-        ExportCSV -->|gcloud storage cp| GCS
-    end
-
-    %% Serverless ETL Compute
-    subgraph "3. Serverless ETL Compute (Cloud Run Jobs)"
-        Scheduler["Cloud Scheduler <br/>(Daily Cron: 00:00)"]
-        RunJob["Cloud Run Job: <br/>danang-etl-job"]
-        Preprocess["Tiền xử lý <br/>(preprocess.py)"]
-        LoadSQL["Nạp Dữ Liệu <br/>(load_to_cloud_sql.py)"]
-
-        Scheduler -->|Kích hoạt qua OIDC| RunJob
-        GCS -->|Tải tệp CSV| RunJob
-        RunJob --> Preprocess
-        Preprocess -->|Dữ liệu sạch| LoadSQL
-    end
-
-    %% Relational & Analytical Storage
-    subgraph "4. Storage Layer (PostgreSQL & BigQuery)"
-        CloudSQL[("Cloud SQL PostgreSQL 15 <br/>(danang-hotels-db)")]
-        BigQuery[("BigQuery OLAP <br/>(danang_hotels_analytics)")]
-
-        LoadSQL -->|Batch Insert (1000/page)<br/>ON CONFLICT DO NOTHING| CloudSQL
-        LoadSQL -->|BigQuery Client SDK<br/>Truncate/Append| BigQuery
-    end
-
-    %% AI Agent & MCP
-    subgraph "5. Intelligence Layer (Google ADK & MCP)"
-        MCP[("MCP Toolbox Server <br/>(tools.yaml)")]
-        ADKAgent["Root Agent <br/>(danang_hotel_agent)"]
-        SearchAgent["Search Agent <br/>(hotel_search_agent)"]
-        DetailAgent["Detail Agent <br/>(hotel_details_agent)"]
-        User["Người dùng cuối"]
-
-        CloudSQL -->|Unix Socket Proxy| MCP
-        MCP -->|Cung cấp SQL Tools| ADKAgent
-        ADKAgent -->|Điều phối yêu cầu| SearchAgent
-        ADKAgent -->|Điều phối yêu cầu| DetailAgent
-        User -->|Hỏi bằng Tiếng Việt| ADKAgent
-    end
-```
-
----
-
 ## 2. Cấu Trúc Thư Mục Dự Án (Project Structure)
 
 Dự án được phân chia thành 3 cấu phần chính nằm trong cùng một không gian làm việc:
