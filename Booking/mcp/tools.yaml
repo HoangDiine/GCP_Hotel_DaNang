@@ -1,0 +1,106 @@
+# tools.yaml
+kind: source
+name: postgres-source
+type: cloud-sql-postgres
+project: capstone-project-2-group-4
+region: asia-southeast1
+instance: danang-hotels-db
+database: postgres
+user: postgres
+password: YourStrongDatabasePassword123
+---
+kind: tool
+name: find-hotels-by-price
+type: postgres-sql
+source: postgres-source
+description: Tìm kiếm các phòng khách sạn Đà Nẵng trống và có giá dưới mức giá trần của người dùng.
+parameters:
+  - name: max_price
+    type: integer
+    description: Giá phòng tối đa bằng VNĐ.
+  - name: checkin_date
+    type: string
+    description: Ngày nhận phòng dạng YYYY-MM-DD.
+statement: |
+  SELECT h.hotel_name, r.room_type_name, p.current_price, p.checkin_date, p.checkout_date
+  FROM room_prices p
+  JOIN hotels h ON p.hotel_id = h.hotel_id
+  JOIN room_types r ON p.room_type_id = r.room_type_id
+  WHERE p.current_price <= $1 AND p.checkin_date = $2
+  ORDER BY p.current_price ASC;
+---
+kind: tool
+name: find-hotels-near-attraction
+type: postgres-sql
+source: postgres-source
+description: Tìm các khách sạn lân cận địa danh cụ thể (ví dụ Cầu Rồng, bãi biển Mỹ Khê) trong khoảng cách nhất định.
+parameters:
+  - name: attraction_name
+    type: string
+    description: Tên địa danh (ví dụ 'Cầu Rồng', 'Mỹ Khê').
+  - name: max_distance_meters
+    type: integer
+    description: Khoảng cách tối đa bằng mét.
+statement: |
+  SELECT h.hotel_name, p.place_name, p.distance_in_meters, l.full_address
+  FROM hotel_nearby_places p
+  JOIN hotels h ON p.hotel_id = h.hotel_id
+  JOIN hotel_locations l ON p.hotel_id = l.hotel_id
+  WHERE p.place_name ILIKE '%' || $1 || '%' AND p.distance_in_meters <= $2
+  ORDER BY p.distance_in_meters ASC;
+---
+kind: tool
+name: get-hotel-details
+type: postgres-sql
+source: postgres-source
+description: Lấy thông tin mô tả chi tiết, xếp hạng sao, số lượng đánh giá, loại thuộc tính, giờ nhận/trả phòng của khách sạn cụ thể theo tên hoặc từ khóa tên khách sạn.
+parameters:
+  - name: hotel_name_query
+    type: string
+    description: "Tên hoặc từ khóa tìm kiếm tên khách sạn (ví dụ: 'Muong Thanh', 'Diamond')."
+statement: |
+  SELECT hotel_id, hotel_name, description, stars_rating, review_count, popular_facilities, property_type, checkin_time_start, checkin_time_end, checkout_time_start, checkout_time_end
+  FROM hotels
+  WHERE hotel_name ILIKE '%' || $1 || '%'
+  LIMIT 5;
+---
+kind: tool
+name: get-hotel-facilities
+type: postgres-sql
+source: postgres-source
+description: Lấy danh sách tất cả các tiện ích (facilities) của một khách sạn cụ thể theo tên hoặc từ khóa tên khách sạn.
+parameters:
+  - name: hotel_name_query
+    type: string
+    description: "Tên hoặc từ khóa tìm kiếm tên khách sạn (ví dụ: 'Muong Thanh', 'Diamond')."
+statement: |
+  SELECT h.hotel_name, f.facility_name
+  FROM hotel_facilities f
+  JOIN hotels h ON f.hotel_id = h.hotel_id
+  WHERE h.hotel_name ILIKE '%' || $1 || '%'
+  ORDER BY f.facility_name;
+---
+kind: tool
+name: get-hotel-reviews
+type: postgres-sql
+source: postgres-source
+description: Lấy điểm đánh giá chi tiết của một khách sạn cụ thể theo tên hoặc từ khóa tên khách sạn (điểm nhân viên, vệ sinh, tiện nghi, thoải mái, đáng giá tiền, vị trí, wifi và điểm trung bình).
+parameters:
+  - name: hotel_name_query
+    type: string
+    description: "Tên hoặc từ khóa tìm kiếm tên khách sạn (ví dụ: 'Muong Thanh', 'Diamond')."
+statement: |
+  SELECT h.hotel_name, r.staff_score, r.facilities_score, r.cleanliness_score, r.comfort_score, r.value_for_money_score, r.location_score, r.free_wifi_score, r.average_score
+  FROM hotel_reviews r
+  JOIN hotels h ON r.hotel_id = h.hotel_id
+  WHERE h.hotel_name ILIKE '%' || $1 || '%'
+  LIMIT 5;
+---
+kind: toolset
+name: default
+tools:
+  - find-hotels-by-price
+  - find-hotels-near-attraction
+  - get-hotel-details
+  - get-hotel-facilities
+  - get-hotel-reviews

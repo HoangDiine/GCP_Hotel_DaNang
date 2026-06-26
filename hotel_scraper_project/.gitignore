@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Biến môi trường bảo mật
+.env
+
+# Cơ sở dữ liệu SQLite
+*.db
+hotel_warehouse.db
+
+# Dữ liệu thu thập offline (HTML thô, dung lượng lớn)
+raw_html/
+paracel_with_dates.html
+
+# File xuất báo cáo (Tự sinh khi chạy pipeline)
+csv_exports/
+
+# Môi trường ảo Python
+venv/
+.venv/
+env/
+ENV/
+
+# Cấu hình IDE và OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

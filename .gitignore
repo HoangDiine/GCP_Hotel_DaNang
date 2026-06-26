@@ -1,0 +1,42 @@
+# Byte-compiled / optimized / DLL files
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables (Sensitive data)
+.env
+**/.env
+
+# Local Databases
+*.db
+**/*.db
+hotel_warehouse.db
+**/hotel_warehouse.db
+
+# Scraped raw data & HTML caches
+**/raw_html/
+**/csv_exports/
+**/cleaned_tables/
+**/*.csv
+!Booking/data/raw_hotels_full.csv # Giữ lại file CSV mẫu này nếu cần, hoặc bỏ qua nếu không muốn đẩy lên.
+
+# Node and package manager files (for firecrawl or other js tools)
+node_modules/
+**/node_modules/
+.pnpm-store/
+**/.pnpm-store/
+
+# Python Virtual environments
+venv/
+.venv/
+env/
+ENV/
+**/venv/
+**/env/
+**/.venv/
+
+# IDE configurations and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
