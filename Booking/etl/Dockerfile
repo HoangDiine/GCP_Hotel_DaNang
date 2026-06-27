@@ -10,8 +10,8 @@ COPY etl/preprocess.py .
 COPY etl/load_to_cloud_sql.py .
 COPY etl/run_etl.py .
 
-# Sao chép tệp dữ liệu CSV từ thư mục data/
-COPY data/raw_hotels_full.csv .
+# Dữ liệu CSV thô hiện tại đã được tải trực tiếp từ GCS khi chạy container (ở preprocess.py)
+# COPY data/raw_hotels_full.csv .
 
 CMD ["python", "run_etl.py"]
 

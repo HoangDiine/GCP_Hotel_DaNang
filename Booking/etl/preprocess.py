@@ -5,22 +5,49 @@ import sys
 import unicodedata
 import pandas as pd
 import numpy as np
+from google.cloud import storage
 
 # Force UTF-8 for stdout on Windows
 sys.stdout.reconfigure(encoding='utf-8')
 
 base_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in locals() else os.getcwd()
-# Thử các đường dẫn khác nhau của raw_hotels_full.csv tùy môi trường chạy
-raw_path = os.path.join(os.path.dirname(base_dir), "data", "raw_hotels_full.csv")
-if not os.path.exists(raw_path):
-    raw_path = os.path.join(base_dir, "raw_hotels_full.csv")
-if not os.path.exists(raw_path):
-    raw_path = "raw_hotels_full.csv"
+
+def download_from_gcs(bucket_name, source_blob_name, destination_file_path):
+    """Tải file từ Google Cloud Storage bucket về thư mục cục bộ"""
+    try:
+        # Client tự động dùng quyền IAM của Service Account khi chạy trên Cloud Run Job
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(source_blob_name)
+        
+        print(f"Đang tải gs://{bucket_name}/{source_blob_name} xuống {destination_file_path}...")
+        blob.download_to_filename(destination_file_path)
+        print("Tải file từ GCS thành công!")
+        return True
+    except Exception as e:
+        print(f"Không thể tải file từ GCS: {e}")
+        return False
+
+# Cấu hình tải dữ liệu thô từ GCS
+bucket_name = os.environ.get("GCS_BUCKET_NAME", "capstone-project-2-group-4-data")
+source_blob_name = "raw_hotels_full.csv"
+raw_path = os.path.join(base_dir, "raw_hotels_full.csv")
+
+# Thử tải từ GCS
+gcs_success = download_from_gcs(bucket_name, source_blob_name, raw_path)
+
+if not gcs_success:
+    print("Sử dụng cơ chế fallback: Tìm file dữ liệu thô cục bộ...")
+    raw_path = os.path.join(os.path.dirname(base_dir), "data", "raw_hotels_full.csv")
+    if not os.path.exists(raw_path):
+        raw_path = os.path.join(base_dir, "raw_hotels_full.csv")
+    if not os.path.exists(raw_path):
+        raw_path = "raw_hotels_full.csv"
 
 output_dir = os.path.join(base_dir, "cleaned_tables")
 os.makedirs(output_dir, exist_ok=True)
 
-print("Đang đọc file dữ liệu CSV thô...")
+print(f"Đang đọc file dữ liệu CSV thô từ đường dẫn: {raw_path}")
 df_raw = pd.read_csv(raw_path)
 print(f"Tổng số dòng đọc được từ raw_hotels_full.csv: {len(df_raw)}")
 
