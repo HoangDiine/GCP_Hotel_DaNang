@@ -1,307 +1,246 @@
-# Da Nang AI Travel Agent & Serverless ETL Pipeline
+# Đà Nẵng AI Travel Agent & Serverless Data Pipeline (GCP)
 
-Dự án này là một hệ thống toàn diện từ đầu đến cuối (End-to-End Pipeline) kết hợp việc **thu thập dữ liệu khách sạn tại Đà Nẵng**, **xây dựng đường ống biến đổi và làm sạch dữ liệu tự động (Serverless ETL)** trên nền tảng **Google Cloud Platform (GCP)**, thiết lập **máy chủ cơ sở dữ liệu MCP (Model Context Protocol)** và phát triển một **trợ lý du lịch ảo thông minh đa tác nhân (Multi-Agent Travel Assistant)** bằng **Google ADK**.
+Dự án này là một hệ thống toàn diện từ đầu đến cuối (End-to-End Pipeline) kết hợp việc **thu thập dữ liệu khách sạn tại Đà Nẵng**, **xây dựng đường ống biến đổi và làm sạch dữ liệu tự động (Serverless ETL)** trên nền tảng **Google Cloud Platform (GCP)**, thiết lập **máy chủ cơ sở dữ liệu MCP (Model Context Protocol)**, phát triển **Module RAG (FastAPI + pgvector)** cho dữ liệu phi cấu trúc, và xây dựng một **trợ lý du lịch ảo thông minh đa tác nhân (Multi-Agent Travel Assistant)** bằng **Google ADK**.
 
-Hệ thống cho phép người dùng tìm kiếm, so sánh giá phòng và tra cứu thông tin chi tiết (tiện ích, đánh giá, khoảng cách tới các điểm du lịch) của khách sạn tại Đà Nẵng thông qua ngôn ngữ tự nhiên một cách trực quan và chính xác.
+Hệ thống cho phép người dùng tìm kiếm, lọc giá phòng, tra cứu thông tin chi tiết (tiện ích, đánh giá, khoảng cách tới các điểm du lịch) và hỏi đáp về các báo cáo/tài liệu dự án bằng ngôn ngữ tự nhiên thông qua giao diện Web Chat trực quan.
 
 ---
 
 ## 1. Sơ Đồ Kiến Trúc Hệ Thống (Architecture Diagram)
 
-Kiến trúc vật lý của hệ thống tuân thủ nguyên lý tách rời **Tính toán (Compute)** và **Lưu trữ (Storage)** để đảm bảo tính chịu lỗi, co giãn linh hoạt và tối ưu hóa chi phí:
-
-## 2. Cấu Trúc Thư Mục Dự Án (Project Structure)
-
-Dự án được phân chia thành 3 cấu phần chính nằm trong cùng một không gian làm việc:
-
-```text
-├── hotel_scraper_project/         # 1. Hệ thống Scraper Booking.com
-│   ├── src/                       # Mã nguồn Python xử lý cào/parse dữ liệu
-│   │   ├── scraper.py             # Kết nối Firecrawl cào HTML danh sách & chi tiết khách sạn
-│   │   ├── parser.py              # Dùng BeautifulSoup4 phân tích HTML và trích xuất thông tin
-│   │   ├── db_setup.py            # Tạo lập cấu trúc bảng SQLite cục bộ
-│   │   ├── pipeline.py            # Quy trình chạy chính từ cào, parse đến lưu SQLite
-│   │   └── export_to_csv.py       # Xuất dữ liệu SQLite ra định dạng CSV thô
-│   ├── raw_html/                  # Chứa các trang HTML tải về để lưu trữ offline
-│   ├── hotel_warehouse.db         # Cơ sở dữ liệu SQLite lưu trữ cục bộ (Star Schema)
-│   ├── pipeline.py                # File wrapper thực thi pipeline scraper
-│   └── requirements.txt           # Thư viện phục vụ scraping (firecrawl, bs4, pandas)
-│
-├── Booking/                       # 2. Hệ thống ETL & AI Agent
-│   ├── data/                      # Lưu trữ dữ liệu CSV phục vụ thử nghiệm
-│   │   └── raw_hotels_full.json   # Dữ liệu khách sạn thô dạng JSON
-│   ├── database/                  # Cấu hình khởi tạo PostgreSQL
-│   │   ├── schema.sql             # Lược đồ cơ sở dữ liệu quan hệ PostgreSQL đích
-│   │   ├── init_db.py             # Khởi tạo bảng và index trên Cloud SQL
-│   │   └── check_db.py            # Kiểm tra nhanh số lượng dòng dữ liệu
-│   ├── etl/                       # Đường ống Serverless ETL
-│   │   ├── preprocess.py          # Biến đổi văn bản (Unicode NFC), regex tách khoảng cách, sinh ID
-│   │   ├── load_to_cloud_sql.py   # Nạp dữ liệu song song vào PostgreSQL (Cloud SQL) và BigQuery
-│   │   ├── run_etl.py             # Điều phối chạy toàn bộ quy trình tiền xử lý và nạp dữ liệu
-│   │   ├── requirements_etl.txt   # Thư viện cho ETL (psycopg2, google-cloud-bigquery, pandas)
-│   │   └── Dockerfile             # Đóng gói môi trường chạy Cloud Run Job
-│   ├── mcp/                       # Model Context Protocol (MCP)
-│   │   └── tools.yaml             # Cấu hình MCP Sql-Toolbox kết nối với Cloud SQL
-│   ├── danang_hotel_agent/        # Trợ lý ảo thông minh Google ADK
-│   │   ├── agent.py               # Thiết lập Multi-Agent (Search Agent + Detail Agent)
-│   │   └── requirements.txt       # Thư viện chạy agent (google-adk, toolbox-core)
-│   └── docs/                      # Báo cáo kỹ thuật chi tiết & Hướng dẫn GCP
-│
-└── firecrawl/                     # 3. Mã nguồn và cấu hình công cụ cào web Firecrawl
-```
-
----
-
-## 3. Mô Hình Hóa Dữ Liệu Đích (Data Modeling)
-
-Hệ thống áp dụng mô hình hình sao (**Star Schema**) được chuẩn hóa để loại bỏ dư thừa dữ liệu thô và tăng tốc độ truy vấn cho AI Agent:
+Kiến trúc vật lý của hệ thống tuân thủ nguyên lý tách rời **Tính toán (Compute)** và **Lưu trữ (Storage)** để đảm bảo khả năng co giãn linh hoạt, tính chịu lỗi cao và tối ưu hóa chi phí:
 
 ```mermaid
-erDiagram
-    hotels ||--|| hotel_locations : "1:1 - has_location"
-    hotels ||--o{ hotel_facilities : "1:N - has_facilities"
-    hotels ||--o{ hotel_nearby_places : "1:N - has_nearby_places"
-    hotels ||--o{ hotel_reviews : "1:1 - has_reviews"
-    hotels ||--o{ room_types : "1:N - has_room_types"
-    hotels ||--o{ room_prices : "1:N - has_prices"
-    room_types ||--o{ room_prices : "1:N - has_prices"
+flowchart TD
+    %% Web Scraping
+    subgraph Scrape["1. Web Scraping Layer (Local / VM)"]
+        Scraper["Scraper Pipeline<br/>(Crawl/pipeline.py)"]
+        Firecrawl["Firecrawl API<br/>(Bypass Anti-bot)"]
+        SQLite[("SQLite Warehouse<br/>(hotel_warehouse.db)")]
+        CSV["raw_hotels_full.csv"]
+        
+        Firecrawl -->|Tải trang HTML| Scraper
+        Scraper -->|Phân tích & Lưu trữ| SQLite
+        SQLite -->|Xuất bản| CSV
+    end
 
-    hotels {
-        varchar hotel_id PK
-        varchar hotel_name
-        text description
-        integer stars_rating
-        integer review_count
-        text popular_facilities
-        varchar property_type
-        varchar checkin_time_start
-        varchar checkin_time_end
-        varchar checkout_time_start
-        varchar checkout_time_end
-    }
+    %% Storage & Ingestion
+    subgraph Ingestion["2. Ingestion & Storage (GCP)"]
+        GCS[("GCS Bucket<br/>danang-hotels-raw-data")]
+        CloudSQL[("Cloud SQL PostgreSQL 15<br/>(danang-hotels-db)")]
+        BigQuery[("BigQuery OLAP<br/>(danang_hotels_analytics)")]
+        
+        CSV -->|gcloud storage cp| GCS
+    end
 
-    hotel_locations {
-        varchar hotel_id PK, FK
-        text street_address
-        varchar city
-        varchar country
-        text full_address
-        numeric latitude
-        numeric longitude
-    }
+    %% Serverless ETL Compute
+    subgraph ETL["3. Serverless ETL (Cloud Run Jobs)"]
+        Scheduler["Cloud Scheduler<br/>(Daily 00:00)"]
+        RunJob["Cloud Run Job<br/>(danang-etl-job)"]
+        
+        Scheduler -->|Kích hoạt| RunJob
+        GCS -->|Đọc CSV thô| RunJob
+        RunJob -->|Làm sạch & Chuẩn hóa| CloudSQL
+        RunJob -->|Nạp phân tích| BigQuery
+    end
 
-    hotel_facilities {
-        varchar hotel_id PK, FK
-        varchar facility_name PK
-    }
+    %% AI & Intelligence Layer
+    subgraph Intelligence["4. AI & Query Layer (Cloud Run)"]
+        MCP["MCP Toolbox Server<br/>(mcp-toolbox)"]
+        RAG["RAG Service<br/>(danang-rag-service)"]
+        Agent["ADK Agent Service<br/>(danang-agent-service)"]
+        
+        CloudSQL -->|Unix Socket| MCP
+        CloudSQL -->|pgvector Table| RAG
+        
+        MCP -->|Cung cấp SQL Tools| Agent
+        RAG -->|Cung cấp API /chat| Agent
+        
+        Agent -->|ADK Web UI Playground| User["Người dùng cuối"]
+    end
 
-    hotel_nearby_places {
-        integer id PK
-        varchar hotel_id FK
-        varchar place_name
-        varchar place_type
-        numeric distance_value
-        varchar distance_unit
-        integer distance_in_meters
-        integer distance_rank
-    }
+    %% Google Vertex AI
+    subgraph VertexAI["5. Vertex AI Foundation Models"]
+        Gemini["Gemini 2.5 Flash<br/>(Tư duy & Sinh câu trả lời)"]
+        Embed["text-multilingual-embedding-002<br/>(Tạo Vector)"]
+        
+        Agent -->|Gọi LLM| Gemini
+        RAG -->|Truy xuất Vector| Embed
+        RAG -->|Tóm tắt Context| Gemini
+    end
+```
 
-    hotel_reviews {
-        varchar review_id PK
-        varchar hotel_id FK
-        numeric staff_score
-        numeric facilities_score
-        numeric cleanliness_score
-        numeric comfort_score
-        numeric value_for_money_score
-        numeric location_score
-        numeric free_wifi_score
-        numeric average_score
-    }
+---
+## 2. Cấu Trúc Thư Mục Dự Án (Project Structure)
 
-    room_types {
-        varchar room_type_id PK
-        varchar hotel_id FK
-        varchar room_type_name
-        varchar bed_types
-        integer max_guests
-    }
+Dự án được tổ chức gọn gàng trong thư mục `Booking` với các thành phần chính sau:
 
-    room_prices {
-        varchar booking_id PK
-        varchar hotel_id FK
-        varchar room_type_id FK
-        numeric original_price
-        numeric current_price
-        numeric discount
-        integer taxes_included
-        timestamp extracted_at
-        date checkin_date
-        date checkout_date
-    }
+```text
+d:\GCP\Booking/
+├── Crawl/                         # 1. Booking.com Scraper (Firecrawl API)
+│   ├── src/                       # Mã nguồn xử lý cào, phân tích và lưu SQLite
+│   │   ├── scraper.py             # Kết nối Firecrawl tải trang HTML
+│   │   ├── parser.py              # Trích xuất dữ liệu chi tiết bằng BeautifulSoup4
+│   │   ├── db_setup.py            # Cấu trúc bảng SQLite cục bộ
+│   │   └── pipeline.py            # Quy trình cào chính
+│   ├── pipeline.py                # Wrapper thực thi scraper
+│   └── requirements.txt           # Dependencies của scraper (firecrawl-py, bs4, pandas)
+│
+├── etl/                         # 2. Đường ống Serverless ETL (Cloud Run Job)
+│   ├── preprocess.py              # Làm sạch văn bản (Unicode NFC), regex chuẩn hóa khoảng cách (mét)
+│   ├── load_to_cloud_sql.py       # Nạp song song vào Cloud SQL (PostgreSQL) và BigQuery
+│   ├── run_etl.py                 # Điều phối chạy toàn bộ pipeline ETL
+│   ├── Dockerfile                 # Đóng gói môi trường chạy ETL Job
+│   └── requirements_etl.txt       # Dependencies của ETL (psycopg2, google-cloud-bigquery)
+│
+├── database/                    # 3. Thiết lập Schema cơ sở dữ liệu PostgreSQL
+│   ├── schema.sql                 # Khai báo cấu trúc bảng đích
+│   └── init_db.py                 # Script khởi tạo bảng và index trên Cloud SQL
+│
+├── danang_hotel_agent/          # 4. AI Travel Agent (Google ADK)
+│   ├── agent.py                   # Định nghĩa 4 Agents (Root, Search, Details, RAG Document)
+│   ├── mcp/                       # Cấu hình Model Context Protocol (MCP)
+│   │   └── tools.yaml             # Khai báo 5 SQL tools kết nối DB (đã thêm LIMIT 50 tối ưu hóa)
+│   │
+│   ├── rag/                       # 5. Module RAG mở rộng (FastAPI + pgvector)
+│   │   ├── main.py                # FastAPI endpoints (/health, /chat, /ingest/file, /admin)
+│   │   ├── rag_chain.py           # Chunking, Vertex AI Embedding & Gemini Generation
+│   │   ├── db.py                  # Kết nối Cloud SQL pgvector & quản lý bảng rag_documents
+│   │   ├── ingest_docs.py         # CLI nạp tài liệu PDF/Markdown vào pgvector
+│   │   ├── Dockerfile             # Dockerfile chạy uvicorn port 8080
+│   │   └── requirements.txt       # Dependencies (fastapi, pgvector, pypdf, google-cloud-aiplatform)
+│   │
+│   ├── Dockerfile                 # Đóng gói Agent chạy adk api_server với --with_ui và --auto_create_session
+│   └── requirements.txt           # Dependencies (google-adk, toolbox-core, requests)
+│
+└── docs/                        # 6. Tài liệu hướng dẫn thiết kế & vận hành
 ```
 
 ---
 
-## 4. Chi Tiết Các Thành Phần Chính
+## 3. Chi Tiết Các Thành Phần Hệ Thống
 
-### 4.1. Bộ Cào Dữ Liệu (`hotel_scraper_project`)
-* **Công cụ cốt lõi**: Sử dụng **Firecrawl API** để vượt qua các lớp bảo vệ bot (Cloudflare) của Booking.com, tải về các trang HTML thô một cách an toàn.
-* **Bộ Phân Tích (Parser)**: Dùng BeautifulSoup4 để tách dữ liệu từ các thẻ HTML phức tạp, xử lý bảng giá động, tiện ích dịch vụ, điểm đánh giá chi tiết của khách hàng và tọa độ địa lý.
-* **Kho Đệm SQLite**: Lưu trữ cục bộ thông qua SQLite để đảm bảo tính an toàn dữ liệu trước khi xuất ra CSV gửi tới Cloud Storage.
+### 3.1. Web Scraper (`Crawl`)
+* **Cơ chế**: Sử dụng **Firecrawl API** để vượt qua các lớp tường lửa chống bot (Cloudflare) của Booking.com một cách hợp lệ.
+* **SQLite Warehouse**: Đóng vai trò làm kho đệm (staging), lưu trữ dữ liệu có quan hệ theo mô hình hình sao (Star Schema) trước khi kết xuất ra file CSV.
 
-### 4.2. Đường Ống ETL Serverless (`Booking/etl`)
-* **Trích xuất (Extract)**: Tải tệp dữ liệu CSV thô từ Google Cloud Storage về môi trường ảo hóa của Cloud Run Job.
-* **Biến đổi (Transform)**:
-  * Chuẩn hóa văn bản tiếng Việt sang chuẩn dựng sẵn **Unicode NFC** để so khớp chuỗi không bị lỗi.
-  * Sử dụng biểu thức chính quy (**Regex**) để chuyển đổi các chuỗi khoảng cách (ví dụ: `"Cầu Rồng 1,2 km"`) sang đơn vị mét thống nhất (`1200 m`).
-  * Thực thi thuật toán xếp hạng khoảng cách (`distance_rank`) cho các địa điểm lân cận để hỗ trợ tìm kiếm nhanh nhất.
-  * Sinh mã định danh nhất quán (Deterministic ID) giúp hệ thống có tính **Idempotency** (cho phép chạy lại ETL nhiều lần mà không sợ trùng lặp hoặc sinh rác cơ sở dữ liệu).
-* **Nạp dữ liệu (Load)**:
-  * Sử dụng thư viện `psycopg2.extras.execute_values` để gom lô 1000 bản ghi nạp vào PostgreSQL, kèm theo cơ chế `ON CONFLICT DO NOTHING` để tối ưu hóa hiệu năng ghi.
-  * Đồng thời đẩy dữ liệu sang **BigQuery Data Warehouse** phục vụ báo cáo phân tích kinh doanh (OLAP).
-* **Vận hành**: Đóng gói Docker, triển khai thành **Cloud Run Job** và kích hoạt tự động theo chu kỳ hàng ngày thông qua **Cloud Scheduler**.
+### 3.2. Serverless ETL (`etl`)
+* **Xử lý khoảng cách**: Sử dụng biểu thức chính quy (Regex) để bóc tách các chuỗi khoảng cách phi cấu trúc (ví dụ: `"Cầu Rồng 1,2 km"`, `"Bãi tắm Mỹ Khê 850 m"`) đưa về dạng số nguyên thống nhất theo đơn vị mét (`1200`, `850`).
+* **Chuẩn hóa Tiếng Việt**: Chuẩn hóa Unicode về dạng dựng sẵn **NFC** để tránh lỗi so sánh chuỗi tiếng Việt trên PostgreSQL.
+* **Idempotency**: Sinh mã định danh nhất quán (Deterministic ID) giúp quá trình chạy lại ETL không bao giờ bị trùng lặp dữ liệu.
+* **Tải dữ liệu**: Sử dụng cơ chế nạp hàng loạt (Batch Insert) kết hợp `ON CONFLICT DO NOTHING` trên PostgreSQL và ghi đè trên BigQuery.
 
-### 4.3. Cổng Truy Vấn Dữ Liệu MCP Server (`Booking/mcp`)
-* Tích hợp cơ sở dữ liệu quan hệ Cloud SQL vào ngữ cảnh của các mô hình ngôn ngữ lớn (LLMs).
-* Khai báo tập hợp 5 SQL-tools chuyên dụng trong `tools.yaml` kết nối trực tiếp đến PostgreSQL:
-  1. `find-hotels-by-price`: Tìm khách sạn còn phòng trống dưới mức giá yêu cầu vào ngày cụ thể.
-  2. `find-hotels-near-attraction`: Tìm khách sạn gần các danh lam thắng cảnh trong bán kính mong muốn.
-  3. `get-hotel-details`: Xem thông tin mô tả chi tiết, sao, giờ nhận/trả phòng.
-  4. `get-hotel-facilities`: Lọc chi tiết danh sách tiện ích dịch vụ có sẵn.
-  5. `get-hotel-reviews`: Tra cứu điểm số đánh giá từ khách hàng cũ trên các tiêu chí.
+### 3.3. MCP Toolbox (`danang_hotel_agent/mcp`)
+* Đóng vai trò là cầu nối bảo mật giữa LLM và cơ sở dữ liệu quan hệ.
+* Khai báo 5 công cụ SQL trong `tools.yaml` kết nối trực tiếp đến Cloud SQL PostgreSQL (được tối ưu hóa bằng mệnh đề `LIMIT 50` để kiểm soát kích thước dữ liệu truyền vào prompt của LLM, tránh tình trạng quá tải và timeout 60 giây).
 
-### 4.4. Trợ Lý Ảo Đa Tác Nhân (`Booking/danang_hotel_agent`)
-Được thiết kế dựa trên kiến trúc **Multi-Agent Orchestration** của Google ADK (Agent Development Kit):
-* **Root Agent (`danang_hotel_agent`)**: Tiếp nhận câu hỏi ngôn ngữ tự nhiên từ khách du lịch, phân tích ý định và định tuyến đến các Agent chuyên trách phù hợp.
-* **Search Agent (`hotel_search_agent`)**: Gọi các MCP tools tìm kiếm khách sạn theo tiêu chí giá phòng và địa lý.
-* **Detail Agent (`hotel_details_agent`)**: Gọi các MCP tools thu thập đánh giá, cơ sở vật chất và chi tiết dịch vụ của khách sạn cụ thể nhằm trả lời câu hỏi chuyên sâu.
+### 3.4. Module RAG (`danang_hotel_agent/rag`)
+* Phục vụ truy xuất thông tin từ tài liệu phi cấu trúc (như file báo cáo PDF, kế hoạch triển khai, hướng dẫn du lịch).
+* Sử dụng **Vertex AI `text-multilingual-embedding-002`** tạo vector 768 chiều và lưu trữ trong bảng `rag_documents` kích hoạt extension `pgvector` trên Cloud SQL.
+* Tổng hợp câu trả lời thông qua **Gemini 2.5 Flash** kèm trích dẫn nguồn tài liệu cụ thể.
+
+### 3.5. Multi-Agent AI Agent (`danang_hotel_agent`)
+Được thiết kế dựa trên kiến trúc **Multi-Agent Orchestration** của Google ADK:
+* **Root Agent (`danang_hotel_agent`)**: Đóng vai trò là Đại sứ Du lịch Đà Nẵng, tiếp nhận câu hỏi, điều phối công việc cho các agent con và tổng hợp câu trả lời tự nhiên, thân thiện.
+* **Search Agent (`hotel_search_agent`)**: Gọi các MCP tools tìm kiếm khách sạn theo giá phòng và khoảng cách địa lý. Hỗ trợ **truy vấn kết hợp** (gọi cả 2 tool và tự so khớp/giao nhau danh sách trong bước suy nghĩ).
+* **Detail Agent (`hotel_details_agent`)**: Gọi các MCP tools xem chi tiết mô tả, tiện ích và điểm đánh giá của khách sạn cụ thể.
+* **RAG Agent (`rag_document_agent`)**: Gọi RAG Service qua HTTP để trả lời các câu hỏi về tài liệu dự án, kiến trúc hệ thống hoặc quy trình.
 
 ---
 
-## 5. Hướng Dẫn Cài Đặt & Sử Dụng
+## 4. Hướng Dẫn Triển Khai Trên GCP (Deployment Guide)
 
-### 5.1. Yêu Cầu Hệ Thống
-* Python 3.10 trở lên
-* Docker (nếu chạy container ETL)
-* Tài khoản Google Cloud Platform (GCP) hoạt động
-* Khóa API Firecrawl (từ [firecrawl.dev](https://firecrawl.dev) hoặc tự host engine)
+*Lưu ý: Các lệnh dưới đây sử dụng định dạng `gcloud.cmd` tương thích tốt nhất với PowerShell trên Windows.*
 
-### 5.2. Khởi Tạo Dự Án Local & Cào Dữ Liệu
-
-1. Cài đặt các thư viện cho Scraper:
-   ```bash
-   cd hotel_scraper_project
-   pip install -r requirements.txt
-   ```
-2. Tạo file `.env` từ file mẫu:
-   ```env
-   FIRECRAWL_API_KEY=your_firecrawl_api_key
-   FIRECRAWL_API_URL=https://api.firecrawl.dev
-   ```
-3. Khởi chạy scraper để cào dữ liệu và lưu vào SQLite:
-   ```bash
-   python pipeline.py
-   ```
-4. Xuất dữ liệu SQLite ra CSV chuẩn bị cho ETL:
-   ```bash
-   python src/export_to_csv.py
-   ```
-   *File `raw_hotels_full.csv` sẽ được sinh ra ở thư mục `Booking/data/`.*
-
-### 5.3. Khởi Tạo Cơ Sở Dữ Liệu PostgreSQL
-
-1. Chuyển sang thư mục Booking:
-   ```bash
-   cd ../Booking
-   pip install -r etl/requirements_etl.txt
-   ```
-2. Cấu hình thông tin cơ sở dữ liệu PostgreSQL trong mã nguồn hoặc biến môi trường.
-3. Chạy mã khởi tạo các bảng và index:
-   ```bash
-   python database/init_db.py
-   ```
-
-### 5.4. Đóng Gói Và Triển Khai ETL Lên GCP
-
-Sử dụng dòng lệnh `gcloud CLI` để triển khai hạ tầng Serverless:
-
+### 4.1. Chuẩn bị tài nguyên & Khởi tạo Database
 ```bash
-# 1. Kích hoạt các API dịch vụ cần thiết trên GCP
-gcloud services enable storage.googleapis.com \
+# 1. Bật các API cần thiết trên dự án GCP
+gcloud.cmd services enable storage.googleapis.com \
     cloudbuild.googleapis.com \
     artifactregistry.googleapis.com \
     sqladmin.googleapis.com \
     run.googleapis.com \
     scheduler.googleapis.com \
-    bigquery.googleapis.com
+    aiplatform.googleapis.com
 
-# 2. Khởi tạo GCS Bucket lưu trữ CSV thô
-gcloud storage buckets create gs://danang-hotels-raw-data --location=asia-southeast1
+# 2. Tạo GCS Bucket và tải file dữ liệu thô lên
+gcloud.cmd storage buckets create gs://capstone-project-2-group-4-data --location=asia-southeast1
+gcloud.cmd storage cp "data/raw_hotels_full.csv" gs://capstone-project-2-group-4-data/raw_hotels_full.csv
 
-# 3. Tải tệp dữ liệu thô lên GCS Bucket
-gcloud storage cp "data/raw_hotels_full.csv" gs://danang-hotels-raw-data/raw_hotels_full.csv
-
-# 4. Khởi tạo cơ sở dữ liệu Cloud SQL (PostgreSQL 15)
-gcloud sql instances create danang-hotels-db \
+# 3. Tạo cơ sở dữ liệu Cloud SQL (PostgreSQL 15)
+gcloud.cmd sql instances create danang-hotels-db \
     --database-version=POSTGRES_15 \
     --tier=db-f1-micro \
     --region=asia-southeast1 \
     --root-password="YourStrongDatabasePassword123"
+```
 
-# 5. Tạo Dataset BigQuery
-bq mk --location=asia-southeast1 danang_hotels_analytics
+### 4.2. Triển khai MCP Toolbox
+1. Tạo một secret trong Secret Manager có tên `mcp-tools-config` chứa nội dung file `Booking/danang_hotel_agent/mcp/tools.yaml`.
+2. Triển khai dịch vụ `mcp-toolbox` trên Cloud Run, thực hiện mount secret trên vào đường dẫn `/app/tools.yaml` và kết nối trực tiếp đến cơ sở dữ liệu Cloud SQL.
 
-# 6. Đóng gói Docker và đẩy lên Artifact Registry
-gcloud artifacts repositories create cloud-run-source-deploy \
-    --repository-format=docker \
-    --location=asia-southeast1
+### 4.3. Triển khai RAG Service
+```bash
+cd danang_hotel_agent/rag
 
-gcloud builds submit --tag asia-southeast1-docker.pkg.dev/[PROJECT_ID]/cloud-run-source-deploy/danang-etl-job:latest .
+# 1. Build và deploy RAG Service lên Cloud Run
+gcloud.cmd run deploy danang-rag-service \
+  --source . \
+  --region asia-southeast1 \
+  --set-env-vars "GOOGLE_CLOUD_PROJECT=capstone-project-2-group-4,GOOGLE_CLOUD_LOCATION=asia-southeast1,CLOUD_SQL_CONNECTION_NAME=capstone-project-2-group-4:asia-southeast1:danang-hotels-db,DB_NAME=postgres,DB_USER=postgres,DB_PASSWORD=YourStrongDatabasePassword123" \
+  --add-cloudsql-instances capstone-project-2-group-4:asia-southeast1:danang-hotels-db \
+  --allow-unauthenticated
+```
 
-# 7. Thiết lập Cloud Run Job thực thi ETL kết nối trực tiếp database qua Unix Socket Proxy
-gcloud run jobs create danang-etl-job \
-    --image=asia-southeast1-docker.pkg.dev/[PROJECT_ID]/cloud-run-source-deploy/danang-etl-job:latest \
+### 4.4. Triển khai Agent Service (ADK với Web UI)
+```bash
+cd ..
+
+# 1. Build và deploy Agent Service lên Cloud Run
+# Sử dụng --with_ui để kích hoạt giao diện chat playground tại URL gốc và --auto_create_session để tự tạo session
+gcloud.cmd run deploy danang-agent-service \
+  --source . \
+  --region asia-southeast1 \
+  --set-env-vars "MCP_TOOLBOX_URL=https://mcp-toolbox-364283911624.asia-southeast1.run.app,RAG_SERVICE_URL=https://danang-rag-service-364283911624.asia-southeast1.run.app,GOOGLE_GENAI_USE_VERTEXAI=True,GOOGLE_CLOUD_PROJECT=capstone-project-2-group-4,GOOGLE_CLOUD_LOCATION=asia-southeast1" \
+  --allow-unauthenticated
+```
+
+### 4.5. Triển khai ETL Job và đặt lịch hàng ngày
+```bash
+cd ../etl
+
+# 1. Build và submit image của ETL Job
+gcloud.cmd builds submit --tag asia-southeast1-docker.pkg.dev/capstone-project-2-group-4/cloud-run-source-deploy/danang-etl-job:latest .
+
+# 2. Tạo Cloud Run Job thực thi ETL kết nối Cloud SQL qua Unix Socket
+gcloud.cmd run jobs create danang-etl-job \
+    --image=asia-southeast1-docker.pkg.dev/capstone-project-2-group-4/cloud-run-source-deploy/danang-etl-job:latest \
     --region=asia-southeast1 \
-    --add-cloudsql-instances=[PROJECT_ID]:asia-southeast1:danang-hotels-db \
-    --set-env-vars="DB_HOST=/cloudsql/[PROJECT_ID]:asia-southeast1:danang-hotels-db" \
-    --set-env-vars="DB_PORT=5432" \
-    --set-env-vars="DB_NAME=postgres" \
-    --set-env-vars="DB_USER=postgres" \
-    --set-env-vars="DB_PASSWORD=YourStrongDatabasePassword123" \
-    --set-env-vars="INPUT_BUCKET=danang-hotels-raw-data" \
-    --set-env-vars="INPUT_FILE=raw_hotels_full.csv"
+    --add-cloudsql-instances=capstone-project-2-group-4:asia-southeast1:danang-hotels-db \
+    --set-env-vars="DB_HOST=/cloudsql/capstone-project-2-group-4:asia-southeast1:danang-hotels-db,DB_PORT=5432,DB_NAME=postgres,DB_USER=postgres,DB_PASSWORD=YourStrongDatabasePassword123,INPUT_BUCKET=capstone-project-2-group-4-data,INPUT_FILE=raw_hotels_full.csv"
 
-# 8. Lập lịch cho Cloud Scheduler kích hoạt tự động lúc 00:00 hàng ngày (Giờ VN)
-gcloud scheduler jobs create http danang-etl-schedule \
+# 3. Tạo Cloud Scheduler tự động gọi Job ETL lúc 00:00 hàng ngày (Giờ Việt Nam)
+gcloud.cmd scheduler jobs create http danang-etl-schedule \
     --schedule="0 0 * * *" \
-    --uri="https://asia-southeast1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/[PROJECT_ID]/jobs/danang-etl-job:run" \
+    --uri="https://asia-southeast1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/capstone-project-2-group-4/jobs/danang-etl-job:run" \
     --http-method=POST \
-    --oauth-service-account-email="danang-etl-sa@[PROJECT_ID].iam.gserviceaccount.com" \
+    --oauth-service-account-email="danang-etl-sa@capstone-project-2-group-4.iam.gserviceaccount.com" \
     --location=asia-southeast1 \
     --time-zone="Asia/Ho_Chi_Minh"
 ```
 
-### 5.5. Chạy Trợ Lý Ảo AI Travel Agent
-
-1. Cài đặt các thư viện cần thiết:
-   ```bash
-   cd danang_hotel_agent
-   pip install -r requirements.txt
-   ```
-2. Khởi tạo MCP Toolbox Server bằng công cụ MCP CLI với tệp cấu hình `Booking/mcp/tools.yaml`.
-3. Thiết lập biến môi trường chỉ đường dẫn tới MCP Toolbox:
-   ```bash
-   export MCP_TOOLBOX_URL="https://your-mcp-toolbox-url.run.app"
-   ```
-4. Chạy tệp trợ lý du lịch chính:
-   ```bash
-   python agent.py
-   ```
-   *Giờ đây, bạn có thể tương tác trực tiếp với Agent bằng các câu hỏi tiếng Việt như: "Tìm giúp tôi khách sạn gần Cầu Rồng giá dưới 1 triệu", "Khách sạn Mường Thanh có hồ bơi không và điểm đánh giá vệ sinh thế nào?"...*
-
 ---
 
-## 6. Liên Hệ & Đóng Góp
-Dự án được xây dựng và phát triển phục vụ cho mục đích nghiên cứu quy trình khai thác dữ liệu và kiến trúc AI Multi-Agent.
-Mọi thắc mắc hoặc đóng góp ý kiến vui lòng tạo **Issue** hoặc gửi **Pull Request** trực tiếp trên repository này!
+## 5. Hướng Dẫn Kiểm Thử (Testing Guide)
+
+Bạn có thể tìm thấy bộ kịch bản kiểm thử chi tiết bao gồm các câu hỏi mẫu cho tính năng tìm kiếm, xem chi tiết, và hỏi đáp tài liệu RAG tại file: [chat_test_cases.md](file:///C:/Users/hoang/.gemini/antigravity-ide/brain/aa0aca8e-4e25-4ceb-a82d-002602b16065/chat_test_cases.md)
+
+### 5.1. Kiểm tra trạng thái dịch vụ (Health Check)
+* **Agent Service**: Truy cập `https://danang-agent-service-364283911624.asia-southeast1.run.app/health` -> Trả về `{"status":"ok"}`.
+* **RAG Service**: Truy cập `https://danang-rag-service-364283911624.asia-southeast1.run.app/health` -> Trả về `{"status":"ok","service":"danang-rag-service"}`.
+
+### 5.2. Chạy thử nghiệm qua giao diện Web
+Truy cập trực tiếp URL của Agent Service:
+👉 **[https://danang-agent-service-364283911624.asia-southeast1.run.app](https://danang-agent-service-364283911624.asia-southeast1.run.app)**
+
+Hệ thống sẽ tự động chuyển hướng sang giao diện **ADK Web UI playground** để bạn nhập câu hỏi trò chuyện trực tiếp với trợ lý du lịch.

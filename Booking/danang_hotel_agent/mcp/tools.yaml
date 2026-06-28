@@ -7,7 +7,7 @@ region: asia-southeast1
 instance: danang-hotels-db
 database: postgres
 user: postgres
-password: YourStrongDatabasePassword123
+password: Capstone2_2026
 ---
 kind: tool
 name: find-hotels-by-price
@@ -27,7 +27,9 @@ statement: |
   JOIN hotels h ON p.hotel_id = h.hotel_id
   JOIN room_types r ON p.room_type_id = r.room_type_id
   WHERE p.current_price <= $1 AND p.checkin_date = $2
-  ORDER BY p.current_price ASC;
+  ORDER BY p.current_price ASC
+  LIMIT 50;
+
 ---
 kind: tool
 name: find-hotels-near-attraction
@@ -47,7 +49,9 @@ statement: |
   JOIN hotels h ON p.hotel_id = h.hotel_id
   JOIN hotel_locations l ON p.hotel_id = l.hotel_id
   WHERE p.place_name ILIKE '%' || $1 || '%' AND p.distance_in_meters <= $2
-  ORDER BY p.distance_in_meters ASC;
+  ORDER BY p.distance_in_meters ASC
+  LIMIT 50;
+
 ---
 kind: tool
 name: get-hotel-details

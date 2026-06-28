@@ -40,3 +40,6 @@ ENV/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Agent custom directory
+.agents/
